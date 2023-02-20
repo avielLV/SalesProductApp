@@ -1,0 +1,182 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:proudcto_app/helpers/image_converter.dart';
+import 'package:proudcto_app/provider/product_form_provider.dart';
+import 'package:proudcto_app/services/services.dart';
+import 'package:proudcto_app/ui/input_decorations.dart';
+import 'package:proudcto_app/widgets/widgets.dart';
+import 'package:provider/provider.dart';
+
+class ProductScreen extends StatelessWidget {
+  const ProductScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final productService = Provider.of<ProductService>(context);
+
+    return ChangeNotifierProvider(
+      create: (_) => ProductFormProvider(productService.selectedProduct),
+      child: _ProdcutScreenBody(productService: productService),
+    );
+
+    // return _ProdcutScreenBody(productService: productService);
+  }
+}
+
+class _ProdcutScreenBody extends StatelessWidget {
+  const _ProdcutScreenBody({
+    required this.productService,
+  });
+
+  final ProductService productService;
+
+  @override
+  Widget build(BuildContext context) {
+    final productForm = Provider.of<ProductFormProvider>(context);
+    return Scaffold(
+      body: SingleChildScrollView(
+        // keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        child: Column(
+          children: [
+            Stack(
+              children: [
+                ProductImage(
+                  url: productService.selectedProduct.picture,
+                ),
+                Positioned(
+                    top: 60,
+                    left: 20,
+                    child: IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new,
+                          size: 40,
+                          color: Colors.white,
+                        ))),
+                Positioned(
+                    top: 60,
+                    right: 20,
+                    child: IconButton(
+                        onPressed: () async {
+                          final picker = ImagePicker();
+                          final XFile? pickedFile = await picker.pickImage(
+                              source: ImageSource.camera, imageQuality: 100);
+                          if (pickedFile == null) {
+                            return;
+                          }
+                          productService
+                              .updateSelectedProductImage(pickedFile.path);
+                          productForm.product.picture =
+                              await ImagenConveterBase64()
+                                  .fileToBase64(pickedFile);
+                          //Todo debo convertir esta imagen a base64 y despues subirla a firebase y inseversa
+                        },
+                        icon: const Icon(
+                          Icons.camera_alt_rounded,
+                          size: 40,
+                          color: Colors.white,
+                        ))),
+              ],
+            ),
+            const _ProductForm(),
+            const SizedBox(height: 100)
+          ],
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          if (!productForm.isValidForm()) return;
+          await productService.saveOrCreateProduct(productForm.product);
+          //todo aqui debo hacer la llamada a guardar
+          Navigator.pop(context);
+        },
+        child: productService.isSaviing
+            ? const CircularProgressIndicator(
+                color: Colors.white,
+              )
+            : const Icon(Icons.save_rounded),
+      ),
+    );
+  }
+}
+
+class _ProductForm extends StatelessWidget {
+  const _ProductForm();
+
+  @override
+  Widget build(BuildContext context) {
+    final productForm = Provider.of<ProductFormProvider>(context);
+    final product = productForm.product;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        width: double.infinity,
+        // height: 200,
+        decoration: _buildBoxDecoration(),
+        child: Form(
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            key: productForm.formKey,
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                TextFormField(
+                  initialValue: product.name,
+                  onChanged: (value) => product.name = value,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'El nombre es obligatorio';
+                    }
+                    return null;
+                  },
+                  decoration: InputDecorations.authInputDecorations(
+                      hintText: 'Nombre del producto', labelText: 'Nombre:'),
+                ),
+                const SizedBox(height: 30),
+                TextFormField(
+                  initialValue: product.price.toString(),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                        RegExp(r'^(\d+)?\.?\d{0,2}'))
+                  ],
+                  onChanged: (value) {
+                    if (double.tryParse(value) == null) {
+                      product.price = 0;
+                    } else {
+                      product.price = double.parse(value);
+                    }
+                  },
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecorations.authInputDecorations(
+                      hintText: '\$150', labelText: 'Precio:'),
+                ),
+                const SizedBox(height: 30),
+                SwitchListTile.adaptive(
+                  title: const Text('Disponible'),
+                  activeColor: Colors.deepPurple,
+                  value: product.available,
+                  onChanged: productForm.updateAvailable,
+                ),
+                const SizedBox(height: 30),
+              ],
+            )),
+      ),
+    );
+  }
+
+  BoxDecoration _buildBoxDecoration() => BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.only(
+            bottomRight: Radius.circular(25),
+            bottomLeft: Radius.circular(25),
+          ),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                offset: const Offset(0, 5),
+                blurRadius: 5)
+          ]);
+}
